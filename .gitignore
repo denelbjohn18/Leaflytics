@@ -1,0 +1,11 @@
+dataset/
+modelFiles/
+# Ignore the virtual environment
+backend/venv/
+venv/
+
+# Ignore heavy model or OS files
+*.dylib
+*.so
+*.exe
+.DS_Store
