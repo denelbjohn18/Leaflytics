@@ -1,67 +1,49 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, OnModuleInit } from '@nestjs/common';
 import * as path from 'path';
+import * as fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import * as fs from 'fs';
-import { PLANT_VILLAGE_CLASSES } from './labels';
+import * as os from 'os';
 
 const execAsync = promisify(exec);
 
 @Injectable()
-export class AnalysisService {
+export class AnalysisService implements OnModuleInit {
   private readonly logger = new Logger(AnalysisService.name);
 
-  async loadModel() {
-    this.logger.log('Python ML Model is loaded lazily per process. Skipping Node-side initialization.');
+  async onModuleInit() {
+    this.logger.log('AnalysisService initialized (Using Python child process for inference)');
   }
 
   async analyzeImage(file: Express.Multer.File) {
+    let tempFilePath = '';
     try {
-      this.logger.log('Starting Python inference via child_process...');
-      
-      // Save buffer to a temporary file for Python to read
-      const tempImagePath = path.join(process.cwd(), `temp_${Date.now()}.jpg`);
-      fs.writeFileSync(tempImagePath, file.buffer);
+      this.logger.log('Starting Python inference process...');
 
-      const modelPath = path.join(process.cwd(), '..', 'model files', 'plant_disease_model.h5');
+      // Save file temporarily
+      const tempDir = os.tmpdir();
+      tempFilePath = path.join(tempDir, `upload-${Date.now()}.jpg`);
+      fs.writeFileSync(tempFilePath, file.buffer);
+
+      const scriptPath = path.join(process.cwd(), 'src', 'analysis', 'run_inference.py');
       const pythonPath = path.join(process.cwd(), 'venv', 'bin', 'python');
-      const scriptPath = path.join(process.cwd(), 'infer.py');
-
-      if (!fs.existsSync(modelPath)) {
-        throw new Error('H5 Model file not found at: ' + modelPath);
-      }
-
-      const { stdout, stderr } = await execAsync(`"${pythonPath}" "${scriptPath}" "${modelPath}" "${tempImagePath}" "efficientnetv2"`);
-
-      // Clean up temp image
-      if (fs.existsSync(tempImagePath)) {
-        fs.unlinkSync(tempImagePath);
-      }
-
+      
+      const { stdout, stderr } = await execAsync(`"${pythonPath}" "${scriptPath}" "${tempFilePath}"`);
+      
       if (stderr && !stdout) {
-        throw new Error('Python Script Stderr: ' + stderr);
+         this.logger.warn(`Python script warning: ${stderr}`);
       }
 
-      // Parse JSON from stdout
-      // The python script might output tensorflow warnings before the final JSON line.
-      // So we split by lines and find the JSON one.
-      const lines = stdout.split('\n').filter(l => l.trim() !== '');
-      let parsed = null;
-      for (const line of lines) {
-        if (line.startsWith('{')) {
-          try { parsed = JSON.parse(line); break; } catch (e) {}
-        }
+      const result = JSON.parse(stdout.trim());
+      
+      if (result.error) {
+        throw new Error(result.error);
       }
 
-      if (!parsed) {
-        throw new Error('Failed to parse Python output: ' + stdout);
-      }
+      const maxProb = result.maxProb;
+      const label = result.label;
 
-      if (parsed.error) {
-        throw new Error('Python Execution Error: ' + parsed.error);
-      }
-
-      const { maxIndex, maxProb } = parsed;
+      this.logger.log(`Prediction: confidence=${(maxProb * 100).toFixed(2)}%`);
 
       if (maxProb < 0.60) {
         return {
@@ -72,10 +54,9 @@ export class AnalysisService {
         };
       }
 
-      // Parse Crop and Disease
-      const label = PLANT_VILLAGE_CLASSES[maxIndex] || 'Unknown___Unknown';
-      const [crop, diseaseRaw] = label.split('___');
-      
+      const [cropRaw, diseaseRaw] = label.split('___');
+      const crop = cropRaw.replace(/_/g, ' ');
+
       let suggestion = 'Maintain current care routine.';
       let diseaseDisplay = 'Healthy';
 
@@ -86,13 +67,17 @@ export class AnalysisService {
 
       return {
         disease: diseaseDisplay,
-        crop: crop.replace(/_/g, ' '),
+        crop: crop,
         confidence: `${(maxProb * 100).toFixed(2)}%`,
         suggestion,
       };
     } catch (err: any) {
       this.logger.error('Error during image analysis', err);
       throw new BadRequestException('Detailed Error: ' + (err.stack || err.message));
+    } finally {
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        fs.unlinkSync(tempFilePath);
+      }
     }
   }
 }

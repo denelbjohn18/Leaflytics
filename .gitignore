@@ -4,8 +4,29 @@ modelFiles/
 backend/venv/
 venv/
 
+# Ignore dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+package-lock.json
+
+# Ignore build artifacts and cache
+dist/
+backend/dist/
+frontend/dist/
+*.tsbuildinfo
+.eslintcache
+.turbo/
+
 # Ignore heavy model or OS files
 *.dylib
 *.so
 *.exe
 .DS_Store
+DS_Store
+
+# Ignore log files
+*.log
+
+# Ignore screenshots in root directory
+/Screenshot*

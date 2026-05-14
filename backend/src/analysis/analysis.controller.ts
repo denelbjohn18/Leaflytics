@@ -1,7 +1,6 @@
 import { Controller, Post, UseInterceptors, UploadedFile, BadRequestException, Body } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AnalysisService } from './analysis.service';
-import * as multer from 'multer';
 
 @Controller('api/v1')
 export class AnalysisController {
@@ -13,7 +12,7 @@ export class AnalysisController {
       limits: {
         fileSize: 5 * 1024 * 1024, // 5MB limit
       },
-      fileFilter: (req, file, cb) => {
+      fileFilter: (_req, file, cb) => {
         if (file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
           cb(null, true);
         } else {
