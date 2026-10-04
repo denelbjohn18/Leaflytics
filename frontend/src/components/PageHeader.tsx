@@ -1,0 +1,3 @@
+import { useLocation } from 'react-router-dom';
+type Props={title:string;subtitle?:string};
+export default function PageHeader({title,subtitle}:Props){const path=useLocation().pathname;const labels=path==='/'?['01 / LEAF DIAGNOSTICS','A closer look.','A healthier leaf.']:path==='/overview'?['02 / MODEL ARCHITECTURE','Biology, meet','intelligence.']:['03 / MODEL PERFORMANCE','Measured.','Not assumed.'];return <header className="page-header"><div className="eyebrow"><span className="signal-dot"/>{labels[0]}</div><div className="header-content"><h1 aria-label={title}>{labels[1]}<br/><span>{labels[2]}</span></h1><div className="header-aside"><p>{subtitle}</p><span className="technical-label">EFFICIENTNETV2 / 38 CLASSES</span></div></div></header>}
